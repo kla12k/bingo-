@@ -1,0 +1,24 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "outDir": "dist",
+    "rootDir": "..",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "declaration": true,
+    "resolveJsonModule": true
+  },
+  "include": [
+    "./**/*.ts",
+    "../lib/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "../lib/promo-slides.ts",
+    "../lib/terms-sections.ts"
+  ]
+}

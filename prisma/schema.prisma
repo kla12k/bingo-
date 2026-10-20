@@ -1,0 +1,548 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Customer management: AbstractUser + User (from apple-bingo custom_auth)
+model User {
+  id        String   @id @default(cuid())
+  // AbstractUser fields (phone_number optional for guest users)
+  phone_number String?  @unique // USERNAME_FIELD for auth; null for guests
+  name         String   @default("Guest")
+  telegram_id  String?  @unique
+  password     String?  // hashed (bcrypt)
+  date_joined  DateTime @default(now())
+  last_login   DateTime?
+  is_verified  Boolean  @default(false)
+  is_staff     Boolean  @default(false)
+  is_active    Boolean  @default(true)
+  is_superuser Boolean @default(false)
+  is_affiliate Boolean  @default(false)
+  // User (extends AbstractUser) fields
+  wallet                    Float    @default(0)
+  bonus                     Float    @default(0)
+  last_withdraw_date        DateTime?
+  no_of_cash_deposited      Int      @default(0)
+  no_of_games_played        Int      @default(0)
+  reserved_amount           Float    @default(0)
+  total_withdraw_amount_per_day Float @default(0)
+  reference                 String   @default("")
+  consecutive_losses       Int      @default(0)
+  affiliate_wallet         Float?
+  affiliate_reserved_amount           Float    @default(0)
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
+}
+
+// Passthrough: Django custom_auth tables (do not drop - used by other apps)
+model CustomAuthAbstractuser {
+  id           BigInt    @id @default(autoincrement())
+  password     String
+  last_login   DateTime?
+  phone_number String    @unique
+  name         String
+  date_joined  DateTime
+  is_active    Boolean   @default(true)
+  is_staff     Boolean   @default(false)
+  is_superuser Boolean   @default(false)
+  is_verified  Boolean   @default(false)
+  is_affiliate Boolean   @default(false)
+  telegram_id  String?
+  user         CustomAuthUser?
+  participations UserGameParticipation[]
+  withdrawRequests   AffiliateWithdrawRequest[]
+  @@map("custom_auth_abstractuser")
+}
+model AffiliateWithdrawRequest {
+  id              BigInt    @id @default(autoincrement())
+  userId          BigInt    @map("user_id")
+  amount          Decimal   @db.Decimal(38, 2)
+  bankName        String?   @map("bank_name") @db.VarChar(255)
+  accountNumber   String?   @map("account_number") @db.VarChar(255)
+  referenceNumber String?   @map("reference_number") @db.VarChar(255)
+  status          Int       @default(0) // 0: Pending, 1: Approved, 2: Rejected
+  createdAt       DateTime? @default(now()) @map("created_at")
+  updatedAt       DateTime? @updatedAt @map("updated_at")
+
+  user CustomAuthAbstractuser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("affiliate_withdraw_request")
+}
+model CustomAuthUser {
+  abstractuser_ptr_id    BigInt   @id
+  abstractuser          CustomAuthAbstractuser @relation(fields: [abstractuser_ptr_id], references: [id], onDelete: NoAction)
+  wallet                Decimal
+  bonus                 Decimal
+  reserved_amount       Decimal?
+  no_of_games_played    Int?
+  no_of_cash_deposited  Int?
+  total_withdraw_amount_per_day Decimal? @db.Decimal(38, 2)
+  first_time_bonus      Boolean?
+  last_withdraw_date    DateTime?
+  reference             String?
+  consecutive_losses    Int?
+  affiliate_wallet      Decimal?
+  affiliate_reserved_amount Decimal? @default(0)
+  @@map("custom_auth_user")
+}
+
+// StakeConfig: persisted stake amounts and bonus per stake (runtime configurable)
+model StakeConfig {
+  id                Int     @id @default(autoincrement())
+  amount            Float   @unique // stake value (e.g. 10, 20, 50)
+  has_bonus         Boolean @default(false) // 10X bones when >= bones_min_players
+  bones_min_players Int     @default(10) // min players for bones eligibility
+  bonus_amount      Float   @default(0) // fixed bonus amount added when win (e.g. 50)
+  is_active         Boolean @default(true)
+  sort_order        Int     @default(0) // display order
+  x4               Boolean @default(false) @map("4x")
+  x6               Boolean @default(false) @map("6x")
+  x8               Boolean @default(false) @map("8x")
+  x10              Boolean @default(false) @map("10x")
+
+  @@map("stake_config")
+}
+
+// RandomPlayer: config for auto/bot players per stake (from apple-bingo custom_auth)
+model RandomPlayer {
+  id               Int     @id @default(autoincrement())
+  on_off           Boolean @default(false)
+  stake            Float   @default(0)
+  names            Json    @default("[]") // list of bot display names
+  wallet           Float   @default(0)
+  number_of_players Int    @default(0)
+  walletTopups     RandomPlayerWalletTopup[]
+}
+
+model RandomPlayerWalletTopup {
+  id             Int      @id @default(autoincrement())
+  randomPlayerId Int      @map("random_player_id")
+  stake          Float    @default(0)
+  balanceBefore  Float    @map("balance_before") @db.DoublePrecision
+  balanceAfter   Float    @map("balance_after") @db.DoublePrecision
+  topupAmount    Float    @map("topup_amount") @db.DoublePrecision
+  reason         String   @default("cron_below_threshold")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  randomPlayer RandomPlayer @relation(fields: [randomPlayerId], references: [id], onDelete: Cascade)
+
+  @@index([randomPlayerId])
+  @@index([createdAt])
+  @@map("random_player_wallet_topup")
+}
+
+model Game {
+  id            String   @id @default(cuid())
+  gameNumber    BigInt   @unique @default(autoincrement()) @map("game_number") // incremental reference (bigint), not primary key
+  code          String?  @unique  // null for stake-room games
+  name          String?
+  status        String   @default("waiting") // waiting | playing | finished | closed | failed
+  maxPlayers    Int      @default(10)
+  stake         Int      @default(0)      // entry stake (units)
+  stakeCurrency String   @default("USD")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  startedAt     DateTime?
+  players       Player[]
+  calledNumbers Int[]    @default([])
+  // stake-room fields
+  playerCard    Json?    // { [userId]: number[] } card pool ids per user
+  randomNumbers Json?   // pre-drawn 1..75 order
+  winnerPrice   Float    @default(0) @db.DoublePrecision
+  /// Net house/admin revenue for this game AFTER removing the jackpot slice (2% of gross admin cut).
+  /// Gross admin cut = (stake × totalCards) − winnerPrice; this field = gross − jackpotDeductedFromAdminCut.
+  adminCut      Float    @default(0) @db.DoublePrecision
+  humanAdminCut Float    @default(0) @map("human_admin_cut") @db.DoublePrecision
+  botAdminCut   Float    @default(0) @map("bot_admin_cut") @db.DoublePrecision
+  humanCardCount Int     @default(0) @map("human_card_count")
+  botCardCount   Int     @default(0) @map("bot_card_count")
+  /// 2% of this game’s *gross* admin cut (before jackpot). Funded from admin cut; same value is subtracted from gross to get `adminCut`.
+  jackpotDeductedFromAdminCut Float @default(0) @map("jackpot_deducted_from_admin_cut") @db.DoublePrecision
+  /// When pool ≥ `jackpot_limit`, winners split this stake’s configured limit (same as Jackpot.jackpot_limit), not the raw pool total. 0 if no jackpot this game.
+  jackpotAwarded             Float @default(0) @map("jackpot_awarded") @db.DoublePrecision
+  // x4/x6/x8/x10 bonus: a % of adminCut moved into winners' payout
+  // when the game ends with callCount <= 4 (for x4) or >= thresholds (for x6/x8/x10).
+  xScenario              String? @map("x_scenario")
+  xBonusPercent          Float    @default(0) @map("x_bonus_percent")
+  xDeductedFromAdminCut  Float    @default(0) @map("x_deducted_from_admin_cut")
+  xAwarded               Float    @default(0) @map("x_awarded")
+  xCallCount             Int?     @map("x_call_count")
+  bonus         Float    @default(0)   // bones amount
+  winner        Json?    // winner user ids
+  winnerNames   String[] @default([]) // display names per winner (strings, not FK)
+  winnerCards   Int[]    @default([]) // card pool ids that won
+  /// Bot display names/codes at game time: { "bot_10_0": { displayName, playerCode } }
+  playerMeta    Json?    @map("player_meta")
+  participations UserGameParticipation[]
+  botParticipations BotGameParticipation[]
+  @@index([status, stake])
+  @@map("game")
+}
+
+model Player {
+  id        String   @id @default(cuid())
+  gameId    String
+  game      Game     @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  userId    String?  // optional for anonymous
+  nickname  String
+  socketId  String?
+  joinedAt  DateTime @default(now())
+  cards     GamePlayerCard[]
+  @@unique([gameId, nickname])
+  @@index([gameId])
+}
+
+// Player-linked cards for code-based games (create/join by code)
+model GamePlayerCard {
+  id        String   @id @default(cuid())
+  playerId  String
+  player    Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  card      Json     // 5x5 grid of numbers
+  marked    Json     @default("[]") // numbers marked on this cartella
+  @@map("Card")
+  @@index([playerId])
+}
+
+// Card pool for stake-room games
+model GameCard {
+  id      BigInt @id @default(autoincrement())
+  numbers Json
+  @@map("game_card")
+}
+
+// Card pool for weekly bingo (seed via sql/weekly_bingo_cards.sql — no db push)
+model WeeklyGameCard {
+  id      BigInt @id @default(autoincrement())
+  numbers Json
+  @@map("weekly_game_card")
+}
+
+// Agent and agent accounts (from apple-bingo agents/agents_account)
+model Agent {
+  id          BigInt    @id @default(autoincrement())
+  balance     Decimal?  @db.Decimal(38, 2)
+  chatId      BigInt?   @map("chat_id")
+  createdAt   DateTime? @map("created_at")
+  enabled     Boolean?  @map("is_active")
+  moneyLimit  Decimal?  @map("money_limit") @db.Decimal(38, 2)
+  name        String?   @db.VarChar(255)
+  password    String?   @db.VarChar(255)
+  phoneNumber String?   @map("phone_number") @db.VarChar(255)
+  status      Boolean?  @db.Boolean
+  updatedAt   DateTime? @map("updated_at")
+
+  accounts AgentsAccount[]
+
+  @@map("agents")
+}
+
+model AgentsAccount {
+  id            BigInt    @id @default(autoincrement())
+  accountNumber String?  @map("account_number") @db.VarChar(255)
+  createdAt     DateTime? @map("created_at")
+  isActive      Boolean?  @map("is_active")
+  paymentMethod Int?     @map("payment_method")
+  updatedAt     DateTime? @map("updated_at")
+  agentsId      BigInt?  @map("agents_id")
+
+  agent Agent? @relation(fields: [agentsId], references: [id])
+
+  @@map("agents_account")
+}
+
+// Payment records (table: payment_request). Enum fields stored as int (index) in DB.
+model PaymentRequest {
+  id                  Int          @id @default(autoincrement())
+  user_id             String
+  customer_chat_id    BigInt?
+  customer_phone_number String?
+  reference_id        String?       @unique
+  amount              Float
+  payment_type        Int          // 0=DEPOSIT, 1=WITHDRAWAL
+  payment_method      Int?         // 0=TELEBIRR, 1=CBE, 2=MPESA, 3=CBE_BIRR
+  transactionSMS      String?       @map("transactionsms") @db.Text
+  payment_status      Int          @default(1) // 0=ACCEPTED, 1=PENDING, 2=REJECTED
+  created_at          DateTime      @default(now())
+  updated_at          DateTime      @updatedAt
+
+  @@index([user_id])
+  @@map("payment_request")
+}
+
+model Transfer {
+  id         String   @id @default(cuid()) @db.Text
+  fromUserId String   @map("from_user_id") @db.Text
+  toUserId   String   @map("to_user_id") @db.Text
+  fromName   String   @map("from_name") @db.Text
+  toName     String   @map("to_name") @db.Text
+  amount     Float    @db.DoublePrecision
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamp(3)
+
+  @@index([fromUserId])
+  @@index([toUserId])
+  @@map("transfer")
+}
+
+model DepositAccount {
+  id             String   @id @default(cuid())
+  name           String
+  account_number String
+  owner_name     String
+  active         Boolean  @default(true)
+
+  @@map("deposit_account")
+}
+
+
+
+model UserGameParticipation {
+  id           String   @id @default(cuid())
+  userId       BigInt
+  gameId       String
+  isWinner     Boolean  @default(false)
+  amountWon    Float    @default(0)
+  timesPlayed  Int      @default(1)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  abstractUser CustomAuthAbstractuser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  game         Game                   @relation(fields: [gameId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, gameId])
+  @@index([userId])
+  @@index([gameId])
+  @@map("game_usergameparticipation")
+}
+
+model BotGameParticipation {
+  id           String   @id @default(cuid())
+  playerCode   String   @map("player_code")
+  displayName  String   @map("display_name")
+  gameId       String   @map("game_id")
+  isWinner     Boolean  @default(false) @map("is_winner")
+  amountWon    Float    @default(0) @map("amount_won")
+  timesPlayed  Int      @default(1) @map("times_played")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  game Game @relation(fields: [gameId], references: [id], onDelete: Cascade)
+
+  @@unique([playerCode, gameId])
+  @@index([playerCode])
+  @@index([gameId])
+  @@map("game_botgameparticipation")
+}
+
+// Log of refunds issued for stuck/failed games (audit trail)
+model RefundLog {
+  id        String   @id @default(cuid())
+  gameId    String
+  userId    String   // custom_auth user id (numeric string) or bot_xxx for bots
+  amount    Float
+  reason    String   @default("stuck_game") // e.g. stuck_game, failed
+  createdAt DateTime @default(now())
+
+  @@unique([gameId, userId], name: "refund_log_game_user_unique")
+  @@index([gameId])
+  @@index([userId])
+  @@index([createdAt])
+  @@map("refund_log")
+}
+
+// What a player actually paid for a round, split by funding source.
+// Unique per (game, user) so a duplicate charge cannot be recorded, and refunds
+// return bonus to bonus instead of converting it into withdrawable cash.
+model GameCharge {
+  id         String   @id @default(cuid())
+  // Stake game id, or weekly edition id for weekly entries — no FK, same as RefundLog.
+  gameId     String   @map("game_id")
+  userId     String   @map("user_id") // custom_auth user id, or bot_pool for the bot bankroll
+  amount     Float
+  walletPart Float    @default(0) @map("wallet_part")
+  bonusPart  Float    @default(0) @map("bonus_part")
+  kind       String   @default("stake_game") // stake_game | stake_game_bots | weekly_entry
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@unique([gameId, userId], map: "game_charge_game_user_key")
+  @@index([userId])
+  @@map("game_charge")
+}
+
+// Append-only money movement trail for forensics (not used for balances).
+model WalletLedger {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  delta     Float
+  kind      String // stake_entry | game_win | refund:* | weekly_entry | weekly_win | weekly_refund
+  refType   String?  @map("ref_type")
+  refId     String?  @map("ref_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([userId, createdAt])
+  @@map("wallet_ledger")
+}
+
+// Coupon: optional start/expiration DateTime, optional max claims per coupon
+model Coupon {
+  id          String    @id @default(cuid())
+  code        String    @unique // e.g. WELCOME10
+  description String?   @db.VarChar(500)
+  rewardType  String?   @default("bonus") @map("reward_type") // e.g. bonus
+  rewardValue Float?    @default(0) @map("reward_value") // amount to credit (e.g. bonus)
+  startAt     DateTime? @map("valid_from") // start DateTime; null = no start limit
+  expiresAt   DateTime? @map("valid_until") // expiration DateTime; null = no end limit
+  maxClaims   Int?      @map("max_claims") // null = unlimited
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  claims      CouponClaim[]
+  @@map("coupon")
+}
+
+// One claim per user per coupon
+model CouponClaim {
+  id        String   @id @default(cuid())
+  couponId  String   @map("coupon_id")
+  userId    BigInt   @map("user_id") // custom_auth_abstractuser.id
+  claimedAt DateTime @default(now()) @map("claimed_at")
+  coupon    Coupon   @relation(fields: [couponId], references: [id], onDelete: Cascade)
+  @@unique([couponId, userId])
+  @@index([userId])
+  @@index([couponId])
+  @@map("coupon_claim")
+}
+
+model Jackpot {
+  id        String   @id @default(cuid())
+  stake     Float    @unique // must not repeat for a specific stake
+  amount    Float    @default(0)
+  jackpot_limit Float @default(0) @map("jackpot_limit")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("jackpot")
+}
+
+/// Audit log when a stake jackpot pays out (SQL: sql/jackpot_win_log.sql — no db push).
+model JackpotWinLog {
+  id                   String   @id @default(cuid())
+  gameId               String   @unique @map("game_id")
+  stake                Float
+  jackpotLimit         Float    @default(0) @map("jackpot_limit")
+  poolBefore           Float    @default(0) @map("pool_before")
+  amountAwarded        Float    @default(0) @map("amount_awarded")
+  contributionFromGame Float    @default(0) @map("contribution_from_game")
+  winnerUserIds        String[] @default([]) @map("winner_user_ids")
+  winnerNames          String[] @default([]) @map("winner_names")
+  winnerCardIds        Int[]    @default([]) @map("winner_card_ids")
+  callCount            Int?     @map("call_count")
+  createdAt            DateTime @default(now()) @map("created_at")
+
+  @@index([stake, createdAt(sort: Desc)])
+  @@map("jackpot_win_log")
+}
+
+// Singleton: system operating hours in Ethiopian time (HH:mm, 24h)
+model SystemWorkingTime {
+  id        Int      @id @default(1)
+  startTime String   @default("11:00") @map("start_time") @db.VarChar(5)
+  endTime   String   @default("23:00") @map("end_time") @db.VarChar(5)
+  isActive  Boolean  @default(true) @map("is_active")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("system_working_time")
+}
+
+// Singleton: time-of-day bot card targets (Ethiopia / EAT). Editable via /api/bot-schedule.
+model BotScheduleConfig {
+  id        Int      @id @default(1)
+  slots     Json     @default("[]")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("bot_schedule_config")
+}
+
+// Per-stake overrides for bot schedule. Falls back to BotScheduleConfig when absent.
+model BotScheduleStakeOverride {
+  stake     Int      @id
+  slots     Json     @default("[]")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("bot_schedule_stake_override")
+}
+
+// --- Weekly Bingo (separate from stake-room games) ---
+
+model WeeklyEdition {
+  id                      String    @id
+  title                   String
+  stake                   Float     @default(10)
+  pattern                 Int       @default(1)
+  startsAt                DateTime  @map("starts_at")
+  registrationOpensAt     DateTime  @map("registration_opens_at")
+  registrationClosesAt    DateTime  @map("registration_closes_at")
+  botCount                Int       @default(200) @map("bot_count")
+  botWallet               Float     @default(500000) @map("bot_wallet")
+  botWalletRemaining      Float     @default(500000) @map("bot_wallet_remaining")
+  botNames                Json      @default("[]") @map("bot_names")
+  botFillHoursBeforeStart Int       @default(12) @map("bot_fill_hours_before_start")
+  maxCardsPerUser         Int       @default(1) @map("max_cards_per_user")
+  houseCutPercent         Float     @default(15) @map("house_cut_percent")
+  status                  String    @default("draft")
+  prizePool               Float     @default(0) @map("prize_pool")
+  winnerPrice             Float     @default(0) @map("winner_price")
+  winnerUserIds           String[]  @default([]) @map("winner_user_ids")
+  winnerCardIds           Int[]     @default([]) @map("winner_card_ids")
+  winnerNames             String[]  @default([]) @map("winner_names")
+  calledNumbers           Int[]     @default([]) @map("called_numbers")
+  randomNumbers           Json?     @map("random_numbers")
+  playerMeta              Json?     @map("player_meta")
+  createdAt               DateTime  @default(now()) @map("created_at")
+  updatedAt               DateTime  @updatedAt @map("updated_at")
+  finishedAt              DateTime? @map("finished_at")
+  participants            WeeklyParticipant[]
+
+  @@index([status, startsAt])
+  @@map("weekly_edition")
+}
+
+model WeeklyParticipant {
+  id           String        @id @default(cuid())
+  editionId    String        @map("edition_id")
+  edition      WeeklyEdition @relation(fields: [editionId], references: [id], onDelete: Cascade)
+  userId       String?       @map("user_id")
+  isBot        Boolean       @default(false) @map("is_bot")
+  botSlot      Int?          @map("bot_slot")
+  displayName  String        @default("Player") @map("display_name")
+  playerCode   String?       @map("player_code")
+  cardIds      Int[]         @default([]) @map("card_ids")
+  entryFeePaid Float         @default(0) @map("entry_fee_paid")
+  confirmedAt  DateTime      @default(now()) @map("confirmed_at")
+
+  @@unique([editionId, userId])
+  @@index([editionId])
+  @@map("weekly_participant")
+}
+
+model GameConfig {
+  id                    String   @id @default("default")
+  numberCallingSpeedSec Int      @default(4) @map("number_calling_speed_sec")
+  gameStartCountdownSec Int      @default(30) @map("game_start_countdown_sec")
+  /// How many completed patterns (lines/diags/corners) are required to claim Bingo.
+  patternsRequired      Int      @default(1) @map("patterns_required")
+  /// Max bingo cards a player may select in a stake lobby.
+  maxCardsPerUser       Int      @default(5) @map("max_cards_per_user")
+  /// When false, hide Auto toggle on play and force manual select (autoBingo off).
+  showAutoSelectButton  Boolean  @default(true) @map("show_auto_select_button")
+  /// 0–100 chance a bot is forced to win when both bots and humans are in the round. Remainder is human-favored.
+  botWinPercent         Int      @default(100) @map("bot_win_percent")
+  updatedAt             DateTime @updatedAt @map("updated_at")
+
+  @@map("game_config")
+}
+
+
+

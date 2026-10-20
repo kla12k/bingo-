@@ -1,0 +1,106 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+    :root {
+        /* Legacy Variables (Hex) */
+        --bg: #0f0f14;
+        --surface: #1a1a24;
+        --border-hex: #2a2a3a;
+        /* Renamed to avoid conflict with shadcn --border (HSL) if referenced by var */
+        --text: #e8e8ed;
+        --muted-hex: #8888a0;
+        --accent-hex: #7c5cff;
+        --accent-hover: #9378ff;
+        --success: #22c55e;
+        --bingo: #f59e0b;
+
+        /* Shadcn / Tailwind Variables (HSL) - Mapped to Legacy Theme */
+        --background: 240 14.3% 6.9%;
+        /* #0f0f14 */
+        --foreground: 240 10% 92%;
+        /* #e8e8ed */
+
+        --card: 240 16.1% 12.2%;
+        /* #1a1a24 */
+        --card-foreground: 240 10% 92%;
+
+        --popover: 240 16.1% 12.2%;
+        --popover-foreground: 240 10% 92%;
+
+        --primary: 252 100% 68%;
+        /* #7c5cff */
+        --primary-foreground: 0 0% 100%;
+
+        --secondary: 240 16% 19.6%;
+        /* #2a2a3a */
+        --secondary-foreground: 240 10% 92%;
+
+        --muted: 240 16% 19.6%;
+        --muted-foreground: 240 5% 65%;
+
+        --accent: 252 100% 68%;
+        --accent-foreground: 0 0% 100%;
+
+        --destructive: 0 62.8% 30.6%;
+        --destructive-foreground: 0 0% 100%;
+
+        --border: 240 16% 19.6%;
+        /* #2a2a3a */
+        --input: 240 16% 19.6%;
+        --ring: 252 100% 68%;
+
+        --radius: 0.5rem;
+    }
+
+    .dark {
+        /* Same as root for now since app is dark-first */
+        --background: 240 14.3% 6.9%;
+        --foreground: 240 10% 92%;
+        --card: 240 16.1% 12.2%;
+        --card-foreground: 240 10% 92%;
+        --popover: 240 16.1% 12.2%;
+        --popover-foreground: 240 10% 92%;
+        --primary: 252 100% 68%;
+        --primary-foreground: 0 0% 100%;
+        --secondary: 240 16% 19.6%;
+        --secondary-foreground: 240 10% 92%;
+        --muted: 240 16% 19.6%;
+        --muted-foreground: 240 5% 65%;
+        --accent: 252 100% 68%;
+        --accent-foreground: 0 0% 100%;
+        --destructive: 0 62.8% 30.6%;
+        --destructive-foreground: 0 0% 100%;
+        --border: 240 16% 19.6%;
+        --input: 240 16% 19.6%;
+        --ring: 252 100% 68%;
+    }
+}
+
+@layer base {
+    * {
+        @apply border-border;
+    }
+
+    body {
+        @apply bg-background text-foreground;
+    }
+
+    /* Legacy element resets */
+    html,
+    body {
+        max-width: 100vw;
+        min-height: 100vh;
+        font-family: "DM Sans", system-ui, sans-serif;
+    }
+
+    a {
+        color: hsl(var(--primary));
+        text-decoration: none;
+    }
+
+    a:hover {
+        text-decoration: underline;
+    }
+}

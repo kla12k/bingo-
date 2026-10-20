@@ -1,0 +1,81 @@
+/** WowBingo's bright arcade palette. */
+
+@import url("https://fonts.googleapis.com/css2?family=Nunito:ital,wght@0,400;0,600;0,700;0,800;1,600&display=swap");
+
+:root,
+[data-theme="light"] {
+  --font-sans: "Nunito", system-ui, sans-serif;
+  --font-mono: ui-monospace, monospace;
+
+  --bg: #f4f8f4;
+  --surface: #ffffff;
+  --surface-elevated: #e9f4f1;
+  --border: #c9ddd6;
+  --foreground: #123b3b;
+  --muted: #52716d;
+  --hover-overlay: rgba(15, 118, 110, 0.06);
+  --car: #8ed5c5;
+
+  --primary: #087f73;
+  --primary-gradient: linear-gradient(135deg, #10a894 0%, #087f73 100%);
+  --primary-rgb: 8, 127, 115;
+  --primary-hover: #06675f;
+  --primary-muted: rgba(8, 127, 115, 0.12);
+  --primary-border: rgba(8, 127, 115, 0.3);
+
+  --stake-green: #087f73;
+
+  --playing-bg: #b7eadc;
+  --playing-text: #07594f;
+
+  --success: #10b981;
+  --success-muted: rgba(16, 185, 129, 0.12);
+  --success-border: rgba(16, 185, 129, 0.3);
+
+  --error: #d64c3d;
+  --error-muted: rgba(214, 76, 61, 0.08);
+  --error-border: rgba(214, 76, 61, 0.22);
+
+  --info: #2874a6;
+  --info-muted: rgba(40, 116, 166, 0.1);
+  --info-border: rgba(40, 116, 166, 0.28);
+
+  --accent: #f2b544;
+  --accent-rgb: 242, 181, 68;
+  --accent-hover: #dc9824;
+
+  --nav-bg: rgba(255, 255, 255, 0.94);
+  --nav-border: rgba(8, 127, 115, 0.14);
+
+  --bottom-nav-bg: rgba(255, 255, 255, 0.96);
+  --bottom-nav-border: rgba(8, 127, 115, 0.16);
+
+  --frosted-bg: rgba(245, 250, 247, 0.94);
+  --frosted-border: rgba(8, 127, 115, 0.12);
+
+  --overlay-bg: rgba(8, 127, 115, 0.04);
+  --overlay-bg-hover: rgba(8, 127, 115, 0.08);
+  --overlay-border: rgba(8, 127, 115, 0.14);
+  --overlay-text: #123b3b;
+
+  /* Weekly lobby */
+  --weekly-bg-from: var(--bg);
+  --weekly-bg-via: #e3f0ec;
+  --weekly-bg-to: #f8faf5;
+  --weekly-surface: var(--surface);
+  --weekly-accent: var(--primary);
+  --weekly-accent-muted: var(--primary-muted);
+
+  --bingo-b: #3b82f6;
+  --bingo-i: #087f73;
+  --bingo-n: #d64c3d;
+  --bingo-g: #e39b29;
+  --bingo-o: #2874a6;
+  --bingo-o-text: #ffffff;
+
+  --bingo-b-called: rgba(59, 130, 246, 0.65);
+  --bingo-i-called: rgba(8, 127, 115, 0.65);
+  --bingo-n-called: rgba(214, 76, 61, 0.65);
+  --bingo-g-called: rgba(227, 155, 41, 0.65);
+  --bingo-o-called: rgba(40, 116, 166, 0.65);
+}
